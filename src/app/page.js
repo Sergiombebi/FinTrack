@@ -1,8 +1,8 @@
 "use client";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
-
-// Simuler un utilisateur connecté (à remplacer par Supabase Auth plus tard)
-const utilisateurConnecte = null; // mettre un objet user quand connecté
+import { supabase } from "@/lib/supabase";
 
 const stats = [
   { label: "Dépensé ce mois", valeur: "0 FCFA", icone: "💸", couleur: "from-rose-500/20 to-rose-600/5" },
@@ -30,7 +30,38 @@ const fonctionnalites = [
 ];
 
 export default function Home() {
-  const estConnecte = !!utilisateurConnecte;
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setLoading(false);
+    };
+
+    getUser();
+
+    // Écouter les changements d'authentification
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setUser(session?.user || null);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+        <div className="text-white">Chargement...</div>
+      </div>
+    );
+  }
+
+  const estConnecte = !!user;
 
   return (
     <div className="flex min-h-screen bg-[#080808] font-sans">
@@ -46,7 +77,7 @@ export default function Home() {
             <div className="mb-10">
               <p className="text-zinc-500 text-sm mb-1">Bienvenue de retour 👋</p>
               <h1 className="text-3xl font-bold text-white">
-                Bonjour, <span className="text-emerald-400">{utilisateurConnecte?.nom}</span>
+                Bonjour, <span className="text-emerald-400">{user.user_metadata?.nom || user.email}</span>
               </h1>
               <p className="text-zinc-400 mt-2 text-sm">Voici un résumé de vos finances ce mois-ci.</p>
             </div>
@@ -109,7 +140,7 @@ export default function Home() {
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row items-center gap-4">
                 <a
-                  href="/auth/login"
+                  href="/auth/register"
                   className="px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl transition-all duration-200 hover:scale-105 text-sm"
                 >
                   Commencer gratuitement
