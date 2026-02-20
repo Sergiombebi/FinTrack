@@ -29,7 +29,7 @@ const fonctionnalites = [
   },
 ];
 
-export default function Home() {
+export default function HomePage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -47,11 +47,16 @@ export default function Home() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setUser(session?.user || null);
+        
+        // Rediriger vers le dashboard si l'utilisateur se connecte
+        if (event === 'SIGNED_IN' && session?.user) {
+          router.push('/dashboard');
+        }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [router]);
 
   if (loading) {
     return (

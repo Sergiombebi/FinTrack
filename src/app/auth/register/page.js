@@ -3,29 +3,29 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useNotification } from "@/contexts/NotificationContext";
 
-export default function Register() {
+export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nom, setNom] = useState("");
   const [prenom, setPrenom] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const { showError, showSuccess } = useNotification();
   const router = useRouter();
 
   const validateForm = () => {
     if (!nom.trim() || !prenom.trim()) {
-      setError("Le nom et le prénom sont requis");
+      showError("Le nom et le prénom sont requis");
       return false;
     }
     if (!email.trim()) {
-      setError("L'email est requis");
+      showError("L'email est requis");
       return false;
     }
     if (password.length < 5) {
-      setError("Le mot de passe doit contenir au moins 5 caractères");
+      showError("Le mot de passe doit contenir au moins 5 caractères");
       return false;
     }
     return true;
@@ -37,8 +37,6 @@ export default function Register() {
     if (!validateForm()) return;
     
     setLoading(true);
-    setError("");
-    setSuccess("");
 
     try {
       // Inscription avec email et mot de passe
@@ -56,7 +54,7 @@ export default function Register() {
 
       if (signUpError) throw signUpError;
 
-      setSuccess("Inscription réussie ! Vérifiez votre email pour confirmer votre compte.");
+      showSuccess("Inscription réussie ! Vous pouvez maintenant vous connecter.");
       
       // Rediriger vers login après 2 secondes
       setTimeout(() => {
@@ -64,7 +62,16 @@ export default function Register() {
       }, 2000);
 
     } catch (error) {
-      setError(error.message);
+      console.error("Erreur d'inscription:", error);
+      
+      // Messages d'erreur plus spécifiques
+      if (error.message.includes("User already registered")) {
+        showError("Cet email est déjà utilisé. Essayez de vous connecter.");
+      } else if (error.message.includes("Password should be at least")) {
+        showError("Le mot de passe doit contenir au moins 6 caractères.");
+      } else {
+        showError("Erreur lors de l'inscription. Veuillez réessayer.");
+      }
     } finally {
       setLoading(false);
     }
@@ -72,7 +79,6 @@ export default function Register() {
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    setError("");
 
     try {
       const { error: googleError } = await supabase.auth.signInWithOAuth({
@@ -84,7 +90,7 @@ export default function Register() {
 
       if (googleError) throw googleError;
     } catch (error) {
-      setError(error.message);
+      showError("Erreur lors de la connexion Google. Veuillez réessayer.");
       setLoading(false);
     }
   };
@@ -224,17 +230,7 @@ export default function Register() {
             </div>
 
             {/* Messages */}
-            {error && (
-              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
-                {success}
-              </div>
-            )}
+            {/* Les messages d'erreur et de succès sont maintenant gérés par les flash notifications */}
 
             {/* Bouton d'inscription */}
             <button

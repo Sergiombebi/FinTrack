@@ -3,31 +3,64 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useNotification } from "@/contexts/NotificationContext";
 
-export default function Login() {
+export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { showError, showSuccess } = useNotification();
   const router = useRouter();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    
+    // Validation des champs
+    if (!email.trim()) {
+      showError("Veuillez entrer votre adresse email.");
+      return;
+    }
+    
+    if (!password.trim()) {
+      showError("Veuillez entrer votre mot de passe.");
+      return;
+    }
+    
     setLoading(true);
-    setError("");
 
     try {
+      console.log("Tentative de connexion avec:", { email: email.trim(), password: "****" });
+      
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim(),
+        password: password,
       });
 
       if (signInError) throw signInError;
 
-      // Rediriger vers le dashboard après connexion réussie
-      router.push("/dashboard");
+      // Vérifier que la session est bien établie
+      if (data.session) {
+        showSuccess(`Bienvenue ${data.session.user.email} !`);
+        // Rediriger vers le dashboard après connexion réussie
+        router.push("/dashboard");
+      } else {
+        throw new Error("Échec de l'établissement de la session");
+      }
     } catch (error) {
-      setError(error.message);
+      console.error("Erreur de connexion:", error);
+      
+      // Messages d'erreur plus spécifiques
+      if (error.message.includes("Invalid login credentials")) {
+        showError("Email ou mot de passe incorrect. Veuillez vérifier vos identifiants.");
+      } else if (error.message.includes("Email not confirmed")) {
+        showError("Veuillez confirmer votre email avant de vous connecter. Regardez dans vos spams !");
+      } else if (error.message.includes("Too many requests")) {
+        showError("Trop de tentatives de connexion. Veuillez attendre quelques minutes.");
+      } else if (error.message.includes("missing email or phone")) {
+        showError("Email manquant. Veuillez vérifier que vous avez bien entré votre email.");
+      } else {
+        showError("Erreur de connexion. Veuillez réessayer plus tard.");
+      }
     } finally {
       setLoading(false);
     }
@@ -35,7 +68,6 @@ export default function Login() {
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    setError("");
 
     try {
       const { error: googleError } = await supabase.auth.signInWithOAuth({
@@ -46,8 +78,11 @@ export default function Login() {
       });
 
       if (googleError) throw googleError;
+      
+      // La redirection sera gérée par la page de callback
+      console.log("Redirection vers l'authentification Google...");
     } catch (error) {
-      setError(error.message);
+      showError("Erreur lors de la connexion Google. Veuillez réessayer.");
       setLoading(false);
     }
   };
@@ -116,13 +151,6 @@ export default function Login() {
                 Mot de passe oublié ?
               </Link>
             </div>
-
-            {/* Messages d'erreur */}
-            {error && (
-              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
-                {error}
-              </div>
-            )}
 
             {/* Bouton de connexion */}
             <button
