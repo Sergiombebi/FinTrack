@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
-import { getBudgets, getExpenses, getCategories, createBudget, updateBudget, deleteBudget } from "@/lib/database";
+import { getBudgets, getExpenses, getCategories, createBudget, updateBudget, deleteBudget, createCategory } from "@/lib/database";
 import { useNotification } from "@/contexts/NotificationContext";
 import {
   BarChart,
@@ -33,8 +33,32 @@ export default function BudgetPage() {
     amount: '',
     alert_threshold: 80
   });
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showAddCategory, setShowAddCategory] = useState(false);
   const router = useRouter();
   const { showSuccess, showError } = useNotification();
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      showError('Le nom de la catégorie est requis');
+      return;
+    }
+
+    try {
+      const newCategory = await createCategory({
+        name: newCategoryName.trim(),
+        user_id: user.id
+      });
+      
+      setCategories([...categories, newCategory]);
+      setNewCategoryName('');
+      setShowAddCategory(false);
+      showSuccess('Catégorie ajoutée avec succès');
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout de la catégorie:', error);
+      showError('Erreur lors de l\'ajout de la catégorie');
+    }
+  };
 
   useEffect(() => {
     const getUser = async () => {
@@ -245,7 +269,7 @@ export default function BudgetPage() {
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-4 py-3 bg-white border border-white/10 rounded-xl text-black focus:outline-none focus:border-emerald-500"
                 >
                   {['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'].map((month, index) => (
                     <option key={index} value={index}>{month}</option>
@@ -257,7 +281,7 @@ export default function BudgetPage() {
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-4 py-3 bg-white border border-white/10 rounded-xl text-black focus:outline-none focus:border-emerald-500"
                 >
                   {[2024, 2023, 2022].map(year => (
                     <option key={year} value={year}>{year}</option>
@@ -403,20 +427,44 @@ export default function BudgetPage() {
                     
                     {/* Alertes */}
                     {budget.isExceeded && (
-                      <div className="flex items-center gap-2 text-red-400 text-sm">
-                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.502H9.5c-.962 0-1.7-.742-1.7-1.66V9.172c0-.99.638-1.7-1.66-1.7H5.25c-.99 0-1.7.742-1.7 1.66v4.668c0 .99.638 1.7 1.66 1.7h8.5c.962 0 1.7-.742 1.7-1.66V9.172c0-.99-.638-1.7-1.66-1.7z" />
-                        </svg>
-                        <span>Budget dépassé de {(budget.totalSpent - budget.amount).toFixed(2)} FCFA</span>
+                      <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3 mb-2">
+                        <div className="flex items-center gap-2 text-red-400 font-semibold">
+                          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.502H9.5c-.962 0-1.7-.742-1.7-1.66V9.172c0-.99.638-1.7-1.66-1.7H5.25c-.99 0-1.7.742-1.7 1.66v4.668c0 .99.638 1.7 1.66 1.7h8.5c.962 0 1.7-.742 1.7-1.66V9.172c0-.99-.638-1.7-1.66-1.7z" />
+                          </svg>
+                          <span>⚠️ BUDGET DÉPASSÉ !</span>
+                        </div>
+                        <div className="text-red-300 text-sm mt-1">
+                          Vous avez dépensé {(budget.totalSpent - budget.amount).toFixed(2)} FCFA de plus que votre budget prévu
+                        </div>
                       </div>
                     )}
                     
                     {budget.isOverBudget && !budget.isExceeded && (
-                      <div className="flex items-center gap-2 text-orange-400 text-sm">
-                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.502H9.5c-.962 0-1.7-.742-1.7-1.66V9.172c0-.99.638-1.7-1.66-1.7H5.25c-.99 0-1.7.742-1.7 1.66v4.668C0 .99.638 1.7 1.66 1.7h8.5c.962 0 1.7-.742 1.7-1.66V9.172c0-.99-.638-1.7-1.66-1.7z" />
-                        </svg>
-                        <span>Alerte: {budget.percentageUsed.toFixed(0)}% du budget utilisé</span>
+                      <div className="bg-orange-500/20 border border-orange-500/30 rounded-lg p-3 mb-2">
+                        <div className="flex items-center gap-2 text-orange-400 font-semibold">
+                          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.502H9.5c-.962 0-1.7-.742-1.7-1.66V9.172c0-.99.638-1.7-1.66-1.7H5.25c-.99 0-1.7.742-1.7 1.66v4.668C0 .99.638 1.7 1.66 1.7h8.5c.962 0 1.7-.742 1.7-1.66V9.172c0-.99-.638-1.7-1.66-1.7z" />
+                          </svg>
+                          <span>⚠️ ALERTE BUDGET</span>
+                        </div>
+                        <div className="text-orange-300 text-sm mt-1">
+                          {budget.percentageUsed.toFixed(0)}% du budget utilisé ({budget.amount * (budget.alert_threshold/100) - budget.totalSpent:.toFixed(2)} FCFA restants avant le seuil d'alerte)
+                        </div>
+                      </div>
+                    )}
+
+                    {budget.percentageUsed >= 90 && !budget.isExceeded && !budget.isOverBudget && (
+                      <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-3 mb-2">
+                        <div className="flex items-center gap-2 text-yellow-400 font-semibold">
+                          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.502H9.5c-.962 0-1.7-.742-1.7-1.66V9.172c0-.99.638-1.7-1.66-1.7H5.25c-.99 0-1.7.742-1.7 1.66v4.668C0 .99.638 1.7 1.66 1.7h8.5c.962 0 1.7-.742 1.7-1.66V9.172c0-.99-.638-1.7-1.66-1.7z" />
+                          </svg>
+                          <span>ATTENTION</span>
+                        </div>
+                        <div className="text-yellow-300 text-sm mt-1">
+                          {budget.percentageUsed.toFixed(0)}% du budget utilisé - Plus que {budget.remaining.toFixed(2)} FCFA disponibles
+                        </div>
                       </div>
                     )}
                   </div>
@@ -435,17 +483,44 @@ export default function BudgetPage() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-white mb-2">Catégorie</label>
-                    <select
-                      value={formData.category_id}
-                      onChange={(e) => setFormData({...formData, category_id: e.target.value})}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-emerald-500"
-                      required
-                    >
-                      <option value="">Sélectionner une catégorie</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
+                    <div className="space-y-2">
+                      <select
+                        value={formData.category_id}
+                        onChange={(e) => setFormData({...formData, category_id: e.target.value})}
+                        className="w-full px-4 py-3 bg-white border border-white/10 rounded-xl text-black focus:outline-none focus:border-emerald-500"
+                        required
+                      >
+                        <option value="" className="text-black">Sélectionner une catégorie</option>
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.id} className="text-black">{cat.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCategory(!showAddCategory)}
+                        className="w-full px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-400 hover:bg-emerald-500/30 transition-colors text-sm"
+                      >
+                        {showAddCategory ? 'Annuler' : '+ Ajouter une nouvelle catégorie'}
+                      </button>
+                      {showAddCategory && (
+                        <div className="flex space-x-2">
+                          <input
+                            type="text"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            className="flex-1 px-4 py-2 bg-white border border-white/10 rounded-xl text-black placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+                            placeholder="Nom de la nouvelle catégorie"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddCategory}
+                            className="px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors"
+                          >
+                            Ajouter
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-white mb-2">Montant du budget (FCFA)</label>

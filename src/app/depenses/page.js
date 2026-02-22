@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
-import { getExpenses, getCategories, createExpense, updateExpense, deleteExpense } from "@/lib/database";
+import { getExpenses, getCategories, createExpense, updateExpense, deleteExpense, createCategory, getBudgets } from "@/lib/database";
 import { useNotification } from "@/contexts/NotificationContext";
 import CreateCategoryModal from "@/components/ui/CreateCategoryModal";
 import { defaultCategories } from "@/lib/default-categories";
@@ -14,6 +14,8 @@ export default function DepensesPage() {
   const [loading, setLoading] = useState(true);
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [budgetCategories, setBudgetCategories] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
@@ -25,8 +27,62 @@ export default function DepensesPage() {
     description: '',
     expense_date: new Date().toISOString().split('T')[0]
   });
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showAddCategory, setShowAddCategory] = useState(false);
   const router = useRouter();
   const { showSuccess, showError } = useNotification();
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      showError('Le nom de la catégorie est requis');
+      return;
+    }
+
+    try {
+      const newCategory = await createCategory({
+        name: newCategoryName.trim(),
+        user_id: user.id
+      });
+      
+      setCategories([...categories, newCategory]);
+      setNewCategoryName('');
+      setShowAddCategory(false);
+      showSuccess('Catégorie ajoutée avec succès');
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout de la catégorie:', error);
+      showError('Erreur lors de l\'ajout de la catégorie');
+    }
+  };
+
+  const checkBudgetStatus = (categoryId) => {
+    const budget = budgets.find(b => b.category_id === categoryId);
+    if (!budget) return null;
+
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    
+    const categoryExpenses = expenses.filter(exp => {
+      const expDate = new Date(exp.expense_date);
+      return exp.category_id === categoryId && 
+             expDate.getMonth() === currentMonth && 
+             expDate.getFullYear() === currentYear;
+    });
+
+    const totalSpent = categoryExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const remaining = budget.amount - totalSpent;
+    const percentageUsed = (totalSpent / budget.amount) * 100;
+    const isOverBudget = percentageUsed > budget.alert_threshold;
+    const isExceeded = totalSpent > budget.amount;
+
+    return {
+      budget,
+      totalSpent,
+      remaining,
+      percentageUsed,
+      isOverBudget,
+      isExceeded
+    };
+  };
 
   useEffect(() => {
     const getUser = async () => {
@@ -70,9 +126,10 @@ export default function DepensesPage() {
     try {
       setStatsLoading(true);
       
-      const [expensesData, categoriesData] = await Promise.all([
+      const [expensesData, categoriesData, budgetsData] = await Promise.all([
         getExpenses(userId, 100),
-        getCategories(userId)
+        getCategories(userId),
+        getBudgets(userId, new Date().getFullYear(), new Date().getMonth() + 1)
       ]);
       
       let finalCategories = categoriesData || [];
@@ -101,6 +158,14 @@ export default function DepensesPage() {
       
       setExpenses(expensesData || []);
       setCategories(finalCategories);
+      setBudgets(budgetsData || []);
+      
+      // Filtrer les catégories qui ont un budget défini
+      const budgetCategoryIds = (budgetsData || []).map(b => b.category_id);
+      const filteredCategories = (finalCategories || []).filter(cat => 
+        budgetCategoryIds.includes(cat.id)
+      );
+      setBudgetCategories(filteredCategories);
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
       showError('Erreur lors du chargement des données');
@@ -254,7 +319,7 @@ export default function DepensesPage() {
               <select
                 value={filters.category}
                 onChange={(e) => setFilters({...filters, category: e.target.value})}
-                className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                className="px-4 py-3 bg-white border border-white/10 rounded-xl text-black focus:outline-none focus:border-emerald-500"
               >
                 <option value="">Toutes les catégories</option>
                 {categories.map(cat => (
@@ -291,18 +356,118 @@ export default function DepensesPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-white mb-2">Catégorie</label>
-                    <select
-                      value={formData.category_id}
-                      onChange={(e) => setFormData({...formData, category_id: e.target.value})}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-emerald-500"
-                      required
-                    >
-                      <option value="">Sélectionner une catégorie</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
+                    <div className="space-y-2">
+                      {budgetCategories.length === 0 && (
+                        <div className="bg-orange-500/20 border border-orange-500/30 rounded-lg p-3 mb-2">
+                          <div className="flex items-center gap-2 text-orange-400 font-semibold mb-1">
+                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Aucun budget défini ce mois-ci</span>
+                          </div>
+                          <div className="text-orange-300 text-sm">
+                            Pour ajouter une dépense, vous devez d'abord définir des budgets.
+                          </div>
+                        </div>
+                      )}
+                      
+                      <select
+                        value={formData.category_id}
+                        onChange={(e) => setFormData({...formData, category_id: e.target.value})}
+                        className="w-full px-4 py-3 bg-white border border-white/10 rounded-xl text-black focus:outline-none focus:border-emerald-500"
+                        required
+                      >
+                        <option value="" className="text-black">
+                          {budgetCategories.length > 0 ? 'Sélectionner une catégorie avec budget' : 'Aucun budget défini ce mois-ci'}
+                        </option>
+                        {budgetCategories.map(cat => (
+                          <option key={cat.id} value={cat.id} className="text-black">{cat.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCategory(!showAddCategory)}
+                        className="w-full px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-400 hover:bg-emerald-500/30 transition-colors text-sm"
+                      >
+                        {showAddCategory ? 'Annuler' : '+ Ajouter une nouvelle catégorie'}
+                      </button>
+                      {showAddCategory && (
+                        <div className="flex space-x-2">
+                          <input
+                            type="text"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            className="flex-1 px-4 py-2 bg-white border border-white/10 rounded-xl text-black placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+                            placeholder="Nom de la nouvelle catégorie"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddCategory}
+                            className="px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors"
+                          >
+                            Ajouter
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Alertes de budget */}
+                  {formData.category_id && (() => {
+                    const budgetStatus = checkBudgetStatus(formData.category_id);
+                    if (!budgetStatus) return null;
+
+                    const { budget, totalSpent, remaining, percentageUsed, isOverBudget, isExceeded } = budgetStatus;
+
+                    return (
+                      <div className="space-y-2">
+                        {isExceeded && (
+                          <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2 text-red-400 font-semibold">
+                              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.502H9.5c-.962 0-1.7-.742-1.7-1.66V9.172c0-.99.638-1.7-1.66-1.7H5.25c-.99 0-1.7.742-1.7 1.66v4.668c0 .99.638 1.7 1.66 1.7h8.5c.962 0 1.7-.742 1.7-1.66V9.172c0-.99-.638-1.7-1.66-1.7z" />
+                              </svg>
+                              <span>⚠️ BUDGET DÉPASSÉ !</span>
+                            </div>
+                            <div className="text-red-300 text-sm mt-1">
+                              Budget: {budget.amount.toFixed(2)} FCFA | Dépensé: {totalSpent.toFixed(2)} FCFA
+                            </div>
+                            <div className="text-red-300 text-sm">
+                              Dépassement de {(totalSpent - budget.amount).toFixed(2)} FCFA
+                            </div>
+                          </div>
+                        )}
+                        
+                        {isOverBudget && !isExceeded && (
+                          <div className="bg-orange-500/20 border border-orange-500/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2 text-orange-400 font-semibold">
+                              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.502H9.5c-.962 0-1.7-.742-1.7-1.66V9.172c0-.99.638-1.7-1.66-1.7H5.25c-.99 0-1.7.742-1.7 1.66v4.668C0 .99.638 1.7 1.66 1.7h8.5c.962 0 1.7-.742 1.7-1.66V9.172c0-.99-.638-1.7-1.66-1.7z" />
+                              </svg>
+                              <span>⚠️ ALERTE BUDGET</span>
+                            </div>
+                            <div className="text-orange-300 text-sm mt-1">
+                              {percentageUsed.toFixed(0)}% du budget utilisé ({remaining.toFixed(2)} FCFA restants)
+                            </div>
+                          </div>
+                        )}
+
+                        {percentageUsed >= 90 && !isExceeded && !isOverBudget && (
+                          <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2 text-yellow-400 font-semibold">
+                              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.502H9.5c-.962 0-1.7-.742-1.7-1.66V9.172c0-.99.638-1.7-1.66-1.7H5.25c-.99 0-1.7.742-1.7 1.66v4.668C0 .99.638 1.7 1.66 1.7h8.5c.962 0 1.7-.742 1.7-1.66V9.172c0-.99-.638-1.7-1.66-1.7z" />
+                              </svg>
+                              <span>ATTENTION</span>
+                            </div>
+                            <div className="text-yellow-300 text-sm mt-1">
+                              {percentageUsed.toFixed(0)}% du budget utilisé - Plus que {remaining.toFixed(2)} FCFA disponibles
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div>
                     <label className="block text-sm font-medium text-white mb-2">Description</label>
                     <input

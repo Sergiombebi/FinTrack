@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
-import { getMonthlyStats, getExpenses, getCategories } from "@/lib/database";
+import { getMonthlyStats, getExpenses, getCategories, getBudgets, getMonthlyTrends, getBudgetTrends, calculateTrend } from "@/lib/database";
 import { useNotification } from "@/contexts/NotificationContext";
 import { defaultCategories } from "@/lib/default-categories";
 
@@ -15,6 +15,10 @@ export default function DashboardPage() {
   const [monthlyStats, setMonthlyStats] = useState(null);
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [budgetCategories, setBudgetCategories] = useState([]);
+  const [trends, setTrends] = useState([]);
+  const [budgetTrends, setBudgetTrends] = useState([]);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickExpense, setQuickExpense] = useState({ amount: '', category_id: '', description: '' });
   const router = useRouter();
@@ -71,10 +75,22 @@ export default function DashboardPage() {
       const expenses = await getExpenses(userId, 5);
       setRecentExpenses(expenses);
       
-      // Charger les catégories pour l'ajout rapide
-      let cats = await getCategories(userId);
+      // Charger les catégories et les budgets pour le mois en cours
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      
+      const [cats, budgetData, expenseTrends, budgetTrendData] = await Promise.all([
+        getCategories(userId),
+        getBudgets(userId, currentYear, currentMonth),
+        getMonthlyTrends(userId, 3),
+        getBudgetTrends(userId, 3)
+      ]);
+      
+      setTrends(expenseTrends || []);
+      setBudgetTrends(budgetTrendData || []);
       
       // Si aucune catégorie n'existe, créer les catégories par défaut
+      let finalCategories = cats || [];
       if (!cats || cats.length === 0) {
         try {
           const categoriesToInsert = defaultCategories.map(cat => ({
@@ -88,7 +104,7 @@ export default function DashboardPage() {
             .select();
           
           if (!catError && createdCategories) {
-            cats = createdCategories;
+            finalCategories = createdCategories;
             showSuccess('Catégories par défaut créées automatiquement !');
           }
         } catch (error) {
@@ -96,7 +112,28 @@ export default function DashboardPage() {
         }
       }
       
-      setCategories(cats || []);
+      setCategories(finalCategories || []);
+      setBudgets(budgetData || []);
+      
+      // Filtrer les catégories qui ont un budget défini
+      const budgetCategoryIds = (budgetData || []).map(b => b.category_id);
+      const filteredCategories = (finalCategories || []).filter(cat => 
+        budgetCategoryIds.includes(cat.id)
+      );
+      setBudgetCategories(filteredCategories);
+      
+      // Calculer le budget total et le budget restant
+      const totalBudget = (budgetData || []).reduce((sum, budget) => sum + budget.amount, 0);
+      const budgetRemaining = totalBudget - (stats?.totalExpenses || 0);
+      const savings = Math.max(0, budgetRemaining); // Les économies ne peuvent pas être négatives
+      
+      // Mettre à jour les stats avec les valeurs calculées
+      setMonthlyStats({
+        ...stats,
+        totalBudget,
+        budgetRemaining,
+        savings
+      });
       
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
@@ -151,11 +188,52 @@ export default function DashboardPage() {
     return null; // Sera redirigé
   }
 
+  // Calculer les tendances
+  const currentMonthExpenses = monthlyStats?.totalExpenses || 0;
+  const previousMonthExpenses = trends.length > 1 ? trends[trends.length - 2].totalExpenses : 0;
+  const expensesTrend = calculateTrend(currentMonthExpenses, previousMonthExpenses);
+
+  const currentTransactions = monthlyStats?.transactionCount || 0;
+  const previousTransactions = trends.length > 1 ? trends[trends.length - 2].transactionCount : 0;
+  const transactionsTrend = calculateTrend(currentTransactions, previousTransactions);
+
+  const currentBudget = monthlyStats?.totalBudget || 0;
+  const previousBudget = budgetTrends.length > 1 ? budgetTrends[budgetTrends.length - 2].totalBudget : 0;
+  const budgetTrend = calculateTrend(currentBudget, previousBudget);
+
+  const currentSavings = monthlyStats?.savings || 0;
+  const previousSavings = previousBudget > 0 ? (previousBudget - previousMonthExpenses) : 0;
+  const savingsTrend = calculateTrend(currentSavings, previousSavings);
+
   const stats = [
-    { label: "Dépensé ce mois", valeur: `${monthlyStats?.totalExpenses?.toFixed(2) || '0'} FCFA`, icone: "💸", couleur: "from-rose-500/20 to-rose-600/5" },
-    { label: "Budget restant", valeur: "0 FCFA", icone: "🎯", couleur: "from-emerald-500/20 to-emerald-600/5" },
-    { label: "Transactions", valeur: monthlyStats?.transactionCount?.toString() || "0", icone: "📊", couleur: "from-blue-500/20 to-blue-600/5" },
-    { label: "Économies", valeur: "0 FCFA", icone: "🏦", couleur: "from-violet-500/20 to-violet-600/5" },
+    { 
+      label: "Dépensé ce mois", 
+      valeur: `${currentMonthExpenses.toFixed(2)} FCFA`, 
+      icone: "💸", 
+      couleur: "from-rose-500/20 to-rose-600/5",
+      trend: expensesTrend
+    },
+    { 
+      label: "Budget restant", 
+      valeur: `${monthlyStats?.budgetRemaining?.toFixed(2) || '0'} FCFA`, 
+      icone: "🎯", 
+      couleur: "from-emerald-500/20 to-emerald-600/5",
+      trend: budgetTrend
+    },
+    { 
+      label: "Transactions", 
+      valeur: currentTransactions.toString(), 
+      icone: "📊", 
+      couleur: "from-blue-500/20 to-blue-600/5",
+      trend: transactionsTrend
+    },
+    { 
+      label: "Économies", 
+      valeur: `${currentSavings.toFixed(2)} FCFA`, 
+      icone: "🏦", 
+      couleur: "from-violet-500/20 to-violet-600/5",
+      trend: savingsTrend
+    },
   ];
 
   return (
@@ -189,6 +267,30 @@ export default function DashboardPage() {
           {showQuickAdd && (
             <div className="mb-8 p-6 bg-white/3 border border-white/5 rounded-2xl">
               <h3 className="text-white font-semibold mb-4">Ajouter une dépense</h3>
+              
+              {budgetCategories.length === 0 ? (
+                <div className="bg-orange-500/20 border border-orange-500/30 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2 text-orange-400 font-semibold mb-2">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Aucun budget défini ce mois-ci</span>
+                  </div>
+                  <div className="text-orange-300 text-sm mb-3">
+                    Pour ajouter une dépense rapide, vous devez d'abord définir des budgets pour vos catégories.
+                  </div>
+                  <Link 
+                    href="/budget"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg transition-colors text-sm"
+                  >
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Définir mes budgets
+                  </Link>
+                </div>
+              ) : null}
+              
               <form onSubmit={handleQuickAddExpense} className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <input
                   type="number"
@@ -202,12 +304,14 @@ export default function DashboardPage() {
                 <select
                   value={quickExpense.category_id}
                   onChange={(e) => setQuickExpense({...quickExpense, category_id: e.target.value})}
-                  className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                  className="px-4 py-3 bg-white border border-white/10 rounded-xl text-black focus:outline-none focus:border-emerald-500"
                   required
                 >
-                  <option value="">Sélectionner une catégorie</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  <option value="" className="text-black">
+                    {budgetCategories.length > 0 ? 'Sélectionner une catégorie avec budget' : 'Aucun budget défini ce mois-ci'}
+                  </option>
+                  {budgetCategories.map(cat => (
+                    <option key={cat.id} value={cat.id} className="text-black">{cat.name}</option>
                   ))}
                 </select>
                 <input
@@ -245,9 +349,22 @@ export default function DashboardPage() {
                   key={index}
                   className={`bg-gradient-to-br ${stat.couleur} border border-white/5 rounded-2xl p-6 hover:scale-105 transition-transform duration-200`}
                 >
-                  <div className="text-3xl mb-3">{stat.icone}</div>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="text-3xl">{stat.icone}</div>
+                    {stat.trend && (
+                      <div className={`flex items-center gap-1 text-xs ${stat.trend.color}`}>
+                        <span>{stat.trend.icon}</span>
+                        <span>{stat.trend.percentage.toFixed(1)}%</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="text-white font-semibold text-sm mb-1">{stat.label}</div>
                   <div className="text-white text-2xl font-bold">{stat.valeur}</div>
+                  {stat.trend && (
+                    <div className="text-white/60 text-xs mt-2">
+                      {stat.trend.label} vs mois dernier
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

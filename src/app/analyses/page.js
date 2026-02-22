@@ -204,7 +204,7 @@ export default function AnalysesPage() {
                 <select
                   value={timeRange}
                   onChange={(e) => setTimeRange(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-4 py-3 bg-white border border-white/10 rounded-xl text-black focus:outline-none focus:border-emerald-500"
                 >
                   <option value="month">Mois</option>
                   <option value="year">Année</option>
@@ -216,9 +216,9 @@ export default function AnalysesPage() {
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-4 py-3 bg-white border border-white/10 rounded-xl text-black focus:outline-none focus:border-emerald-500"
                 >
-                  {[2024, 2023, 2022].map(year => (
+                  {[2026, 2025, 2024, 2023, 2022].map(year => (
                     <option key={year} value={year}>{year}</option>
                   ))}
                 </select>
