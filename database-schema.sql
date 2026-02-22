@@ -31,6 +31,7 @@ CREATE TABLE budgets (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   month INTEGER NOT NULL CHECK (month >= 1 AND month <= 12),
   year INTEGER NOT NULL CHECK (year >= 2020 AND year <= 2100),
+  alert_threshold INTEGER DEFAULT 80 CHECK (alert_threshold >= 1 AND alert_threshold <= 100),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, category_id, month, year)

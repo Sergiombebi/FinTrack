@@ -17,10 +17,12 @@ export default function Navbar() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log("Navbar auth state change:", { event, user: session?.user?.email });
         setUser(session?.user || null);
         
-        // Rediriger vers dashboard si connexion
-        if (event === 'SIGNED_IN' && session?.user) {
+        // Rediriger vers dashboard si connexion réussie ET si on n'est pas déjà sur dashboard
+        if (event === 'SIGNED_IN' && session?.user && !window.location.pathname.includes('/dashboard')) {
+          console.log("Redirection automatique vers dashboard depuis navbar");
           router.push('/dashboard');
         }
       }

@@ -54,6 +54,17 @@ export default function RegisterPage() {
 
       if (signUpError) throw signUpError;
 
+      // Créer les catégories par défaut pour le nouvel utilisateur
+      if (data.user) {
+        try {
+          const { createDefaultCategories } = await import('@/lib/default-categories');
+          await createDefaultCategories(data.user.id);
+        } catch (catError) {
+          console.error('Erreur lors de la création des catégories:', catError);
+          // Ne pas bloquer l'inscription si les catégories échouent
+        }
+      }
+
       showSuccess("Inscription réussie ! Vous pouvez maintenant vous connecter.");
       
       // Rediriger vers login après 2 secondes

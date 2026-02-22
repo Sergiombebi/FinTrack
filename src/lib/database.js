@@ -53,12 +53,26 @@ export async function createExpense(expense) {
   return data
 }
 
-export async function deleteExpense(expenseId, userId) {
+export async function updateExpense(expenseId, expense) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .update(expense)
+    .eq('id', expenseId)
+    .select(`
+      *,
+      categories (name, color, icon)
+    `)
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function deleteExpense(expenseId) {
   const { error } = await supabase
     .from('expenses')
     .delete()
     .eq('id', expenseId)
-    .eq('user_id', userId)
   
   if (error) throw error
   return true
@@ -66,13 +80,17 @@ export async function deleteExpense(expenseId, userId) {
 
 // STATISTICS
 export async function getMonthlyStats(userId, year = new Date().getFullYear(), month = new Date().getMonth() + 1) {
+  // Calculer les dates de début et de fin du mois
+  const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+  const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // Dernier jour du mois
+  
   // Total des dépenses du mois
   const { data: expenses, error: expensesError } = await supabase
     .from('expenses')
     .select('amount')
     .eq('user_id', userId)
-    .eq('year', year)
-    .eq('month', month)
+    .gte('expense_date', startDate)
+    .lte('expense_date', endDate)
   
   if (expensesError) throw expensesError
   
@@ -86,8 +104,8 @@ export async function getMonthlyStats(userId, year = new Date().getFullYear(), m
       categories (name, color, icon)
     `)
     .eq('user_id', userId)
-    .eq('year', year)
-    .eq('month', month)
+    .gte('expense_date', startDate)
+    .lte('expense_date', endDate)
   
   if (categoryError) throw categoryError
   
@@ -129,9 +147,53 @@ export async function getBudgets(userId, year = new Date().getFullYear(), month 
 }
 
 export async function createBudget(budget) {
+  try {
+    // Essayer d'abord avec alert_threshold
+    const { data, error } = await supabase
+      .from('budgets')
+      .insert([budget])
+      .select(`
+        *,
+        categories (name, color, icon)
+      `)
+      .single()
+    
+    if (error) {
+      // Si l'erreur concerne alert_threshold, essayer sans
+      if (error.message.includes('alert_threshold') || error.code === 'PGRST204') {
+        const { data: dataWithoutThreshold, error: errorWithoutThreshold } = await supabase
+          .from('budgets')
+          .insert([{
+            user_id: budget.user_id,
+            category_id: budget.category_id,
+            amount: budget.amount,
+            year: budget.year,
+            month: budget.month
+          }])
+          .select(`
+            *,
+            categories (name, color, icon)
+          `)
+          .single()
+        
+        if (errorWithoutThreshold) throw errorWithoutThreshold
+        return dataWithoutThreshold
+      }
+      throw error
+    }
+    
+    return data
+  } catch (error) {
+    console.error('Erreur détaillée dans createBudget:', error);
+    throw error
+  }
+}
+
+export async function updateBudget(budgetId, budget) {
   const { data, error } = await supabase
     .from('budgets')
-    .insert([budget])
+    .update(budget)
+    .eq('id', budgetId)
     .select(`
       *,
       categories (name, color, icon)
@@ -140,4 +202,14 @@ export async function createBudget(budget) {
   
   if (error) throw error
   return data
+}
+
+export async function deleteBudget(budgetId) {
+  const { error } = await supabase
+    .from('budgets')
+    .delete()
+    .eq('id', budgetId)
+  
+  if (error) throw error
+  return true
 }

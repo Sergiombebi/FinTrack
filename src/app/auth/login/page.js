@@ -40,8 +40,11 @@ export default function LoginPage() {
 
       // Vérifier que la session est bien établie
       if (data.session) {
+        console.log("Connexion réussie, session:", data.session);
         showSuccess(`Bienvenue ${data.session.user.email} !`);
-        // Rediriger vers le dashboard après connexion réussie
+        
+        // Redirection immédiate - plus de délai
+        console.log("Redirection immédiate vers /dashboard");
         router.push("/dashboard");
       } else {
         throw new Error("Échec de l'établissement de la session");

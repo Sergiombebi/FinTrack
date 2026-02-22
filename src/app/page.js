@@ -1,33 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar from "@/components/layout/Sidebar";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-
-const stats = [
-  { label: "Dépensé ce mois", valeur: "0 FCFA", icone: "💸", couleur: "from-rose-500/20 to-rose-600/5" },
-  { label: "Budget restant", valeur: "0 FCFA", icone: "🎯", couleur: "from-emerald-500/20 to-emerald-600/5" },
-  { label: "Transactions", valeur: "0", icone: "📊", couleur: "from-blue-500/20 to-blue-600/5" },
-  { label: "Économies", valeur: "0 FCFA", icone: "🏦", couleur: "from-violet-500/20 to-violet-600/5" },
-];
-
-const fonctionnalites = [
-  {
-    titre: "Suivi en temps réel",
-    description: "Enregistrez chaque dépense instantanément et gardez un œil sur vos finances à tout moment.",
-    icone: "⚡",
-  },
-  {
-    titre: "Analyses intelligentes",
-    description: "Des graphiques clairs pour comprendre où va votre argent et identifier vos habitudes.",
-    icone: "📈",
-  },
-  {
-    titre: "Gestion du budget",
-    description: "Définissez des limites par catégorie et recevez des alertes avant de les dépasser.",
-    icone: "🎯",
-  },
-];
+import { getCurrentUser } from "@/lib/auth";
 
 export default function HomePage() {
   const [user, setUser] = useState(null);
@@ -36,8 +12,16 @@ export default function HomePage() {
 
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+      console.log("Home: Vérification de l'utilisateur...");
+      const user = await getCurrentUser();
+      
+      if (user) {
+        console.log("Home: Utilisateur trouvé, redirection vers dashboard");
+        router.push("/dashboard");
+        return;
+      }
+      
+      setUser(null);
       setLoading(false);
     };
 
@@ -46,11 +30,14 @@ export default function HomePage() {
     // Écouter les changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setUser(session?.user || null);
+        console.log("Home: Auth state change:", { event, user: session?.user?.email });
         
-        // Rediriger vers le dashboard si l'utilisateur se connecte
-        if (event === 'SIGNED_IN' && session?.user) {
+        if (event === 'SIGNED_IN' && session?.user && !window.location.pathname.includes('/dashboard')) {
+          console.log("Home: Redirection automatique vers dashboard");
           router.push('/dashboard');
+        } else if (event === 'SIGNED_OUT') {
+          console.log("Home: Utilisateur déconnecté");
+          setUser(null);
         }
       }
     );
@@ -66,125 +53,111 @@ export default function HomePage() {
     );
   }
 
-  const estConnecte = !!user;
-
+  // Si l'utilisateur est connecté, il sera redirigé vers dashboard
+  // Sinon, afficher la page d'accueil pour les non-connectés
   return (
-    <div className="flex min-h-screen bg-[#080808] font-sans">
-      {/* Sidebar */}
-      <Sidebar />
-
-      {/* Contenu principal */}
-      <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
-        {estConnecte ? (
-          /* ===== VUE CONNECTÉE ===== */
-          <div className="p-6 md:p-10 max-w-5xl mx-auto">
-            {/* Header */}
-            <div className="mb-10">
-              <p className="text-zinc-500 text-sm mb-1">Bienvenue de retour 👋</p>
-              <h1 className="text-3xl font-bold text-white">
-                Bonjour, <span className="text-emerald-400">{user.user_metadata?.nom || user.email}</span>
-              </h1>
-              <p className="text-zinc-400 mt-2 text-sm">Voici un résumé de vos finances ce mois-ci.</p>
+    <div className="min-h-screen bg-[#080808]">
+      {/* Navigation principale */}
+      <nav className="border-b border-white/5">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-              {stats.map((stat) => (
-                <div
-                  key={stat.label}
-                  className={`bg-gradient-to-br ${stat.couleur} border border-white/5 rounded-2xl p-5`}
-                >
-                  <div className="text-2xl mb-3">{stat.icone}</div>
-                  <p className="text-white font-bold text-lg">{stat.valeur}</p>
-                  <p className="text-zinc-500 text-xs mt-1">{stat.label}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Dernières dépenses */}
-            <div className="bg-white/3 border border-white/5 rounded-2xl p-6">
-              <h2 className="text-white font-semibold mb-4">Dernières dépenses</h2>
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="text-4xl mb-3">📭</div>
-                <p className="text-zinc-500 text-sm">Aucune dépense enregistrée pour ce mois.</p>
-                <button className="mt-4 px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-semibold rounded-xl transition-colors">
-                  + Ajouter une dépense
-                </button>
-              </div>
-            </div>
+            <span className="text-white font-semibold text-lg">FinTrack</span>
           </div>
-        ) : (
-          /* ===== VUE NON CONNECTÉE (Landing Page) ===== */
-          <div className="flex flex-col min-h-screen">
-            {/* Hero Section */}
-            <div className="relative flex flex-col items-center justify-center flex-1 px-6 py-24 text-center overflow-hidden">
-              {/* Background effect */}
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-3xl" />
-                <div className="absolute top-1/4 right-1/4 w-[300px] h-[300px] bg-teal-500/5 rounded-full blur-2xl" />
-              </div>
-
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-medium mb-8">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Gestion financière personnelle
-              </div>
-
-              {/* Titre */}
-              <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight tracking-tight mb-6 max-w-2xl">
-                Maîtrisez vos{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">
-                  dépenses
-                </span>
-              </h1>
-
-              <p className="text-zinc-400 text-lg max-w-md mb-10 leading-relaxed">
-                Suivez, analysez et optimisez vos finances personnelles en toute simplicité.
-              </p>
-
-              {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row items-center gap-4">
-                <a
-                  href="/auth/register"
-                  className="px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl transition-all duration-200 hover:scale-105 text-sm"
-                >
-                  Commencer gratuitement
-                </a>
-                <a
-                  href="/auth/login"
-                  className="px-8 py-3.5 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all duration-200 text-sm hover:bg-white/5"
-                >
-                  Se connecter
-                </a>
-              </div>
-            </div>
-
-            {/* Fonctionnalités */}
-            <div className="px-6 py-16 max-w-4xl mx-auto w-full">
-              <h2 className="text-center text-white font-bold text-2xl mb-2">Tout ce dont vous avez besoin</h2>
-              <p className="text-center text-zinc-500 text-sm mb-10">Simple, puissant, efficace.</p>
-
-              <div className="grid md:grid-cols-3 gap-5">
-                {fonctionnalites.map((f) => (
-                  <div
-                    key={f.titre}
-                    className="bg-white/3 border border-white/5 rounded-2xl p-6 hover:border-emerald-500/20 hover:bg-emerald-500/3 transition-all duration-300"
-                  >
-                    <div className="text-3xl mb-4">{f.icone}</div>
-                    <h3 className="text-white font-semibold mb-2 text-sm">{f.titre}</h3>
-                    <p className="text-zinc-500 text-sm leading-relaxed">{f.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Footer */}
-            <footer className="border-t border-white/5 px-6 py-6 text-center">
-              <p className="text-zinc-600 text-xs">© 2025 FinTrack — Suivi de dépenses personnel</p>
-            </footer>
+          
+          <div className="flex items-center gap-4">
+            <Link href="/auth/login" className="text-zinc-400 hover:text-white transition-colors">
+              Se connecter
+            </Link>
+            <Link href="/auth/register" className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl transition-colors">
+              S'inscrire
+            </Link>
           </div>
-        )}
-      </main>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <div className="max-w-6xl mx-auto px-6 py-20">
+        <div className="text-center mb-16">
+          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+            Maîtrisez vos <span className="text-emerald-400">finances</span> en un clic
+          </h1>
+          <p className="text-xl text-zinc-400 mb-8 max-w-2xl mx-auto">
+            Suivez vos dépenses, analysez vos habitudes et atteignez vos objectifs financiers avec notre application intuitive et moderne.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/auth/register" className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl transition-colors text-lg">
+              Commencer gratuitement
+            </Link>
+            <Link href="/auth/login" className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl transition-colors text-lg">
+              Se connecter
+            </Link>
+          </div>
+        </div>
+
+        {/* Fonctionnalités */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+          <div className="bg-white/3 border border-white/5 rounded-2xl p-8 text-center">
+            <div className="text-4xl mb-4">⚡</div>
+            <h3 className="text-white font-semibold text-lg mb-3">Suivi en temps réel</h3>
+            <p className="text-zinc-400 text-sm">Enregistrez chaque dépense instantanément et gardez un œil sur vos finances à tout moment.</p>
+          </div>
+          
+          <div className="bg-white/3 border border-white/5 rounded-2xl p-8 text-center">
+            <div className="text-4xl mb-4">📈</div>
+            <h3 className="text-white font-semibold text-lg mb-3">Analyses intelligentes</h3>
+            <p className="text-zinc-400 text-sm">Des graphiques clairs pour comprendre où va votre argent et identifier vos habitudes.</p>
+          </div>
+          
+          <div className="bg-white/3 border border-white/5 rounded-2xl p-8 text-center">
+            <div className="text-4xl mb-4">🎯</div>
+            <h3 className="text-white font-semibold text-lg mb-3">Gestion du budget</h3>
+            <p className="text-zinc-400 text-sm">Définissez des limites par catégorie et recevez des alertes avant de les dépasser.</p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16">
+          <div className="text-center">
+            <div className="text-3xl font-bold text-emerald-400 mb-2">10K+</div>
+            <div className="text-zinc-500 text-sm">Utilisateurs actifs</div>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-emerald-400 mb-2">50M+</div>
+            <div className="text-zinc-500 text-sm">FCFA économisés</div>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-emerald-400 mb-2">4.8⭐</div>
+            <div className="text-zinc-500 text-sm">Note moyenne</div>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-emerald-400 mb-2">99.9%</div>
+            <div className="text-zinc-500 text-sm">Uptime</div>
+          </div>
+        </div>
+
+        {/* CTA Final */}
+        <div className="bg-gradient-to-r from-emerald-500/20 to-teal-600/5 border border-emerald-500/20 rounded-2xl p-12 text-center">
+          <h2 className="text-3xl font-bold text-white mb-4">Prêt à reprendre le contrôle de vos finances ?</h2>
+          <p className="text-zinc-400 mb-8 max-w-2xl mx-auto">
+            Rejoignez des milliers d'utilisateurs qui ont déjà transformé leur relation avec l'argent.
+          </p>
+          <Link href="/auth/register" className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl transition-colors text-lg">
+            Créer mon compte gratuit
+          </Link>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="border-t border-white/5 py-8">
+        <div className="max-w-6xl mx-auto px-6 text-center">
+          <p className="text-zinc-500 text-sm">© 2024 FinTrack. Tous droits réservés.</p>
+        </div>
+      </footer>
     </div>
   );
 }
