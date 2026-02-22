@@ -7,6 +7,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { getMonthlyStats, getExpenses, getCategories, getBudgets, getMonthlyTrends, getBudgetTrends, calculateTrend } from "@/lib/database";
 import { useNotification } from "@/contexts/NotificationContext";
 import { defaultCategories } from "@/lib/default-categories";
+import BudgetAssistant from "@/components/ui/BudgetAssistant";
+import SmartAlerts from "@/components/ui/SmartAlerts";
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
@@ -250,6 +252,9 @@ export default function DashboardPage() {
             <p className="text-zinc-400 mt-2 text-sm">Voici un résumé de vos finances ce mois-ci.</p>
           </div>
 
+          {/* Alertes intelligentes */}
+          <SmartAlerts userId={user.id} />
+
           {/* Bouton d'ajout rapide */}
           <div className="mb-8">
             <button
@@ -434,6 +439,16 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+      
+      {/* Assistant Budgétaire */}
+      {user && monthlyStats && (
+        <BudgetAssistant 
+          userId={user.id}
+          currentMonthExpenses={monthlyStats.totalExpenses || 0}
+          currentBudget={monthlyStats.totalBudget || 0}
+          categories={categories}
+        />
+      )}
     </div>
   );
 }
